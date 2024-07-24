@@ -1,0 +1,105 @@
+pipeline {
+    agent any
+
+    environment {
+        GIT_URL = 'https://github.com/WebGoat/WebGoat.git'
+    }
+
+    stages {
+        stage('Limpar Workspace') {
+            steps {
+                cleanWs()
+            }
+        }
+
+        stage('Checkout do GitHub') {
+            steps {
+                git branch: 'main', url: env.GIT_URL
+            }
+        }
+
+        stage('SCA com Dependency-Check') {
+            steps {
+                 sh '/home/pri/script/dependency-check-script.sh'
+                 sh '/home/pri/script/webgoat_dependency_script.sh &'
+            }
+        }
+        
+        // stage('Análise de Segurança com Horusec') {
+        //     steps {
+        //         // Executar o Horusec CLI para análise de segurança
+        //         sh '''
+        //         docker run --rm -v /home/pri/relatorio:/report -v /var/run/docker.sock:/var/run/docker.sock \
+        //             -v ${WORKSPACE}:/src/horusec \
+        //             horuszup/horusec-cli:v2.9.0-beta.3 horusec start -p /src/horusec -P ${WORKSPACE} -o json -O /report/output.json
+        //         '''
+        //         sh '/home/pri/script/webgoat_horusec_script.sh'
+        //     }
+        // }
+        
+        stage('SAST com Horusec') {
+            steps {
+            // Executar o Horusec CLI para análise de segurança
+                sh 'horusec start -p ./ -a 4097c9d4-9a29-4e1e-95fd-15607961f4fd -D' 
+                sh '/home/pri/script/webgoat_horusec_script.sh'
+            }
+        }
+        
+        stage('SAST com SonarQube') {
+            steps {
+                script {
+                    sh '''
+                        docker run \
+                            --rm \
+                            -v $(pwd):/usr/src \
+                            -e SONAR_HOST_URL="http://192.168.0.101:9000" \
+                            sonarsource/sonar-scanner-cli \
+                              -Dsonar.projectKey=webgoat \
+                              -Dsonar.sources=. \
+                              -Dsonar.host.url=http://192.168.0.101:9000 \
+                              -Dsonar.login=254edcac5e6c22d3be699ecf6a568c3ca6309ccc \
+                              -Dsonar.exclusions=**/*.java 
+                        '''
+                }
+            }
+        }
+
+        stage('Pull e Run Docker Container Webgoat') {
+            steps {
+                sh 'docker pull webgoat/webgoat:latest'
+                sh 'docker run -d -p 8085:8080 webgoat/webgoat:latest & sleep 60'
+            }
+        }
+        
+        stage('Docker Image Scan com Trivy') {
+            steps {
+                sh 'docker run --rm -v /home/pri/relatorio:/report -v /var/run/docker.sock:/var/run/docker.sock aquasec/trivy:latest image webgoat/webgoat:latest --scanners vuln -f json -o /report/trivy_report.json'
+                sh '/home/pri/script/webgoat_trivy_script.sh'
+                
+            }
+         }
+        
+        stage('DAST com OWASP ZAP') {
+            steps {
+                sh 'docker run --rm -p 8090:8090 -v /home/pri/relatorio:/report -v /home/pri/zap/wrk:/zap/wrk -t zaproxy/zap-stable zap-baseline.py -t http://192.168.0.101:8085/WebGoat/login -x /report/zap-webgoat-report.xml || true'
+                sh '/home/pri/script/webgoat_zap_script.sh'
+                
+            }
+            
+        }
+
+    }
+    
+    post {
+        always {
+            script {
+                def containerId = sh(script: 'docker ps -q --filter ancestor=webgoat/webgoat', returnStdout: true).trim()
+                if (containerId != "") {
+                    sh "docker stop $containerId"
+                    sh "docker rm $containerId"
+                }
+            }
+        }
+    }
+}
+

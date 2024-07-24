@@ -1,0 +1,48 @@
+pipeline {
+    agent any
+
+    environment {
+        GIT_URL = 'https://github.com/logicalhacking/DVHMA.git'
+    }
+
+    stages {
+        stage('Limpar Workspace') {
+            steps {
+                cleanWs()
+            }
+        }
+
+        stage('Checkout do GitHub') {
+            steps {
+                git branch: 'master', url: env.GIT_URL
+            }
+        }
+        
+        stage ('mobfs') {
+            steps {
+                script {
+                    sh 'docker run --rm -v /$(pwd):/src opensecurity/mobsfscan /src'
+                }
+            }
+        }
+        
+        stage('SonarQube Analysis') {
+            steps {
+                script {
+                    sh '''
+                        docker run \
+                            --rm \
+                            -v $(pwd):/usr/src \
+                            -e SONAR_HOST_URL="http://192.168.0.103:9000" \
+                            sonarsource/sonar-scanner-cli \
+                              -Dsonar.projectKey=dvhma \
+                              -Dsonar.sources=. \
+                              -Dsonar.host.url=http://192.168.0.103:9000 \
+                              -Dsonar.login=sqp_d3fa4bef183a63183d097b41219470bf4311afbc\
+                              -Dsonar.exclusions=**/*.java 
+                     '''
+                }
+            }
+        }
+    }
+}

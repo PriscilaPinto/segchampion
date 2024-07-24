@@ -1,0 +1,38 @@
+pipeline {
+    agent any
+    
+    stages {
+        stage('Checkout') {
+            steps {
+                git 'https://github.com/hardik05/Damn_Vulnerable_C_Program.git'
+            }
+        }
+        
+        stage('Cppcheck') {
+            steps {
+                sh 'cppcheck . --xml --enable=all --output-file=cppcheck-result.xml'
+                sh 'cp cppcheck-result.xml /home/pri/relatorio/'
+            }
+        }
+
+        stage('Enviando relatório para o SonarQube') {
+            steps {
+                script {
+                    sh '''
+                        docker run \
+                            --rm \
+                            -v $(pwd):/usr/src \
+                            -e SONAR_HOST_URL="http://192.168.0.103:9000" \
+                            sonarsource/sonar-scanner-cli \
+                                -Dsonar.projectKey=c \
+                                -Dsonar.sources=. \
+                                -Dsonar.host.url=http://192.168.0.103:9000 \
+                                -Dsonar.login=60b4834495faf4e32848123d7c2343f68dc0556a \
+                                -Dsonar.cxx.cppcheck.reportPath=/home/pri/relatorio/cppcheck-result.xml
+                    '''
+                }
+            }
+        }
+    }
+}
+

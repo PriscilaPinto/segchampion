@@ -1,0 +1,29 @@
+#!/bin/bash
+
+# Definindo variáveis
+API_URI="http://localhost:8081/api/v2/import-scan/"
+AUTH_TOKEN="ca8c5177da32c38d1a053d88a5d6fc66239a5403"
+ENGAGEMENT=3
+VERIFIED=true
+ACTIVE=true
+LEAD=1
+TAGS="test"
+SCAN_TYPE="Horusec Scan"
+MIN_SEVERITY="Info"
+SKIP_DUPLICATES=true
+CLOSE_OLD_FINDINGS=false
+FILE_PATH="/home/pri/relatorio/output.json"
+
+# Realiza a solicitação POST usando curl
+curl -X POST $API_URI \
+  -H "Authorization: Token $AUTH_TOKEN" \
+  -F "engagement=$ENGAGEMENT" \
+  -F "verified=$VERIFIED" \
+  -F "active=$ACTIVE" \
+  -F "lead=$LEAD" \
+  -F "tags=$TAGS" \
+  -F "scan_type=$SCAN_TYPE" \
+  -F "minimum_severity=$MIN_SEVERITY" \
+  -F "skip_duplicates=$SKIP_DUPLICATES" \
+  -F "close_old_findings=$CLOSE_OLD_FINDINGS" \
+  -F "file=@$FILE_PATH"

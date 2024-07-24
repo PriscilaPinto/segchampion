@@ -1,0 +1,49 @@
+pipeline {
+    agent any
+
+    environment {
+        GIT_URL = 'https://github.com/payatu/diva-android.git'
+    }
+
+    stages {
+        stage('Limpar Workspace') {
+            steps {
+                cleanWs()
+            }
+        }
+
+        stage('Checkout do GitHub') {
+            steps {
+                git branch: 'master', url: env.GIT_URL
+            }
+        }
+        
+        stage ('mobfs') {
+            steps {
+                script {
+                    sh 'docker run --rm -v /$(pwd):/src opensecurity/mobsfscan /src || true'
+                }
+            }
+        }
+        
+        stage('SonarQube Analysis') {
+            steps {
+                script {
+                    sh '''
+                        docker run \
+                            --rm \
+                            -v $(pwd):/usr/src \
+                            -e SONAR_HOST_URL="http://192.168.0.105:9000" \
+                            sonarsource/sonar-scanner-cli \
+                              -Dsonar.projectKey=diva \
+                              -Dsonar.sources=. \
+                              -Dsonar.host.url=http://192.168.0.105:9000 \
+                              -Dsonar.login=sqp_7ec1e12528e359d7f465374cba520cdf10c2c421 \
+                              -Dsonar.qualitygate="Sonar way" \
+                              -Dsonar.exclusions=**/*.java 
+                     '''
+                }
+            }
+        }
+    }
+}
