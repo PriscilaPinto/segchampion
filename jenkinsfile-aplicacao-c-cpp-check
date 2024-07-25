@@ -1,43 +1,45 @@
 pipeline {
     agent any
-
-    environment {
-        GIT_URL = 'https://github.com/hardik05/Damn_Vulnerable_C_Program.git'
-    }
-
-    stages {
-        stage('Limpar Workspace') {
-            steps {
-                cleanWs()
-            }
-        }
-
-        stage('Checkout do GitHub') {
-            steps {
-                git branch: 'master', url: env.GIT_URL
-            }
-        }
-
-        stage('SAST com Horusec_Flawfinder') {
-            steps {
-                sh '''
-                docker run --rm \
-                    -v /home/pri/relatorio:/report \
-                    -v /var/run/docker.sock:/var/run/docker.sock \
-                    -v ${WORKSPACE}:/src/horusec \
-                    -v /home/pri/horusec-config.json:/config/horusec-config.json \
-                    horuszup/horusec-cli:v2.9.0-beta.3 \
-                    horusec start \
-                    -p /src/horusec \
-                    -P ${WORKSPACE} \
-                    -o json \
-                    -O /report/output.json \
-                    --config-file-path=/config/horusec-config.json
-                '''
-                sh '/home/pri/script/aplicacao_c_horusec_script.sh'
-            
     
+    stages {
+        stage('Checkout do github') {
+            steps {
+                git 'https://github.com/hardik05/Damn_Vulnerable_C_Program.git'
             }
+        }
+        
+        stage('Cppcheck') {
+            steps {
+                sh 'cppcheck . --xml --enable=all --output-file=cppcheck-result.xml'
+                sh 'cp cppcheck-result.xml /home/pri/relatorio/'
+            }
+        }
+
+        stage('Enviando relatório para o SonarQube') {
+            steps {
+                script {
+                    sh '''
+                        docker run \
+                            --rm \
+                            -v $(pwd):/usr/src \
+                            -e SONAR_HOST_URL="http://192.168.0.103:9000" \
+                            sonarsource/sonar-scanner-cli \
+                                -Dsonar.projectKey=c \
+                                -Dsonar.sources=. \
+                                -Dsonar.host.url=http://192.168.0.103:9000 \
+                                -Dsonar.login=60b4834495faf4e32848123d7c2343f68dc0556a \
+                                -Dsonar.cxx.cppcheck.reportPath=/home/pri/relatorio/cppcheck-result.xml
+                    '''
+                }
+            }
+        }
+    }
+     post {
+        success {
+            echo 'Pipeline executado com sucesso!'
+        }
+        failure {
+            echo 'Pipeline falhou!'
         }
     }
 }
